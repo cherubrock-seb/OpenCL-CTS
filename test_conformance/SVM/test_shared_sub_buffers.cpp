@@ -23,13 +23,13 @@ const char *shared_sub_buffers_test_kernel[] = {
   "} Node;\n"
 
   // create linked lists that use nodes from 2 different buffers
-  "__global Node* allocate_node(__global Node* pNodes1, __global Node* pNodes2, volatile __global int* allocation_index, size_t i)\n"
+  "__global Node* allocate_node(__global Node* pNodes1, __global Node* pNodes2, volatile __global int* allocation_index, size_t num_lists)\n"
   "{\n"
-  // mix things up, adjacent work items will allocate from different buffers
-  "    if(i & 0x1)\n"
-  "        return &pNodes1[atomic_inc(allocation_index)];\n"
-  "    else\n"
-  "        return &pNodes2[atomic_inc(allocation_index)];\n"
+  // List heads occupy the first half of the first parent buffer.
+  // Allocate tail nodes from the second halves of the two parent buffers.
+  "    size_t ticket = (size_t)atomic_inc(allocation_index) - num_lists;\n"
+  "    size_t offset = ticket >> 1;\n"
+  "    return (ticket & 1) ? &pNodes1[offset] : &pNodes2[offset];\n"
   "}\n"
 
   // The allocation_index parameter must be initialized on the host to N work-items
@@ -44,7 +44,7 @@ const char *shared_sub_buffers_test_kernel[] = {
   "    pNode->position_in_list = 0;\n"
   "    __global Node *pNew;\n"
   "    for(int j=1; j < list_length; j++) {\n"
-  "        pNew = allocate_node(pNodes_sub1, pNodes2_sub1, allocation_index, i);\n"
+  "        pNew = allocate_node(pNodes_sub2, pNodes2_sub2, allocation_index, get_global_size(0));\n"
   "        pNew->global_id = i;\n"
   "        pNew->position_in_list = j;\n"
   "        pNode->pNext = pNew;  // link new node onto end of list\n"
